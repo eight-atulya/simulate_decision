@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -9,6 +10,8 @@ try:
     _env_loaded = False
 except ImportError:
     _env_loaded = None
+
+logger = logging.getLogger(__name__)
 
 
 def _load_env() -> None:
