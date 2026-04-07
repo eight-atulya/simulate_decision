@@ -180,6 +180,36 @@ SIGNAL_LOSS_THRESHOLD=3
    make check
    ```
 
+## Git Workflow
+
+### Commit Message Conventions
+
+Use structured commit messages with prefixes for better tracking:
+
+```bash
+# Bug fixes
+git commit -m "[fix] ~ Brief description of the fix"
+
+# New features or enhancements
+git commit -m "[feat] ~ Brief description of the new feature"
+
+# Upgrades or improvements
+git commit -m "[upgrade] ~ Brief description of the improvement"
+
+# Documentation updates
+git commit -m "[docs] ~ Brief description of documentation changes"
+
+# Code refactoring
+git commit -m "[refactor] ~ Brief description of refactoring"
+```
+
+**Examples:**
+```bash
+git commit -m "[fix] ~ Add missing logger import in config.py to resolve NameError"
+git commit -m "[upgrade] ~ Add rerun functionality for failed jobs (backend API + frontend UI)"
+git commit -m "[feat] ~ Enhance server logging and graceful shutdown handling"
+```
+
 ## Configuration
 
 - Backend port: 8000 (configurable via BACKEND_PORT)
