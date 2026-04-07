@@ -216,6 +216,6 @@ make dev
 ## See Also
 
 - [API Documentation](http://localhost:8000/docs)
-- [README.md](../README.md)
-- [pyproject.toml](../pyproject.toml)
-- [data_capture_schema.md](data_capture_schema.md)
+- [README.md](../../../README.md)
+- [pyproject.toml](../../../pyproject.toml)
+- [data_capture_schema.md](../../../docs/data_capture_schema.md)
