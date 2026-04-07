@@ -192,6 +192,35 @@ class PipelineTemplates:
         use_cases=["complex problems", "refinement", "self-correction"],
     )
 
+    ATULYA_CORE_ONE = PipelineTemplate(
+        name="atulya.core.one",
+        description="Sequential Deterministic Automaton (SDA) - Deterministic bitstream processing with state transitions",
+        config=PipelineConfig(
+            name="atulya.core.one",
+            stages=[
+                StageConfig(
+                    name="stream_ingestor",
+                    signature_name="deconstruct",  # Using deconstruct as SI
+                    retries=2,
+                ),
+                StageConfig(
+                    name="state_register",
+                    signature_name="verify",  # Using verify as state validation
+                    retries=2,
+                ),
+                StageConfig(
+                    name="logic_transformation",
+                    signature_name="reconstruct",  # Using reconstruct as LTU
+                    retries=1,
+                ),
+            ],
+            iteration_mode=IterationMode.FIXED,
+            max_iterations=1,  # SDA is single-pass
+            signal_loss_threshold=1,
+        ),
+        use_cases=["deterministic processing", "state machines", "cryptographic analysis"],
+    )
+
     @classmethod
     def get(cls, name: str) -> PipelineTemplate | None:
         """Get a template by name."""
@@ -202,6 +231,7 @@ class PipelineTemplates:
             "synthesis": cls.SYNTHESIS,
             "comparative": cls.COMPARATIVE,
             "iterative": cls.ITERATIVE,
+            "atulya.core.one": cls.ATULYA_CORE_ONE,
         }
         return templates.get(name)
 
@@ -224,6 +254,7 @@ class PipelineTemplates:
                 cls.SYNTHESIS,
                 cls.COMPARATIVE,
                 cls.ITERATIVE,
+                cls.ATULYA_CORE_ONE,
             ]
         ]
 

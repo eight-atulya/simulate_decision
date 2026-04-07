@@ -1,0 +1,23 @@
+{
+  "status": "FAILURE",
+  "iterations": 8,
+  "purified_atoms": null,
+  "blueprint": null,
+  "strategy_history": [],
+  "metadata": {
+    "concept": "What are the fundamental principles of finite state machines?",
+    "total_iterations": 8,
+    "pipeline_name": "atulya.core.one",
+    "stages_executed": [
+      "stream_ingestor",
+      "state_register",
+      "logic_transformation"
+    ],
+    "lm_calls_count": 8,
+    "observability_enabled": true
+  },
+  "pipeline": "atulya.core.one",
+  "completed_at": "2026-04-07T10:10:51.609288+00:00",
+  "duration_seconds": 119.300478,
+  "error": "Not converged after 8 iterations"
+}

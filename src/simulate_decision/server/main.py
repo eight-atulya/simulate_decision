@@ -33,7 +33,10 @@ def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
         host=host,
         port=port,
         reload=False,
-        access_log=False,
+        access_log=True,
+        log_level=os.getenv("LOG_LEVEL", "info"),
+        workers=int(os.getenv("WORKERS", "1")),
+        loop="asyncio",
     )
     server = uvicorn.Server(config)
     server.run()

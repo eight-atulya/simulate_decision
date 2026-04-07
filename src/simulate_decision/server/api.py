@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 import time
 import logging
+import asyncio
+import os
 from pathlib import Path
 from typing import Any
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from simulate_decision.server.job_manager import JobManager, JobStatus
@@ -126,7 +128,7 @@ class AnalyzeRequest(BaseModel):
     concept: str = Field(..., min_length=10, max_length=10000, description="The concept to analyze")
     iterations: int = Field(3, ge=1, le=10, description="Number of processing iterations")
     max_retries: int = Field(3, ge=0, le=5, description="Maximum retry attempts")
-    pipeline: str = Field("standard", pattern="^(standard|creative|analytical)$", description="Processing pipeline to use")
+    pipeline: str = Field("standard", pattern=r"^(standard|creative|analytical|basic|full|synthesis|iterative|atulya\.core\.one)$", description="Processing pipeline to use")
 
 
 class ChatRequest(BaseModel):
@@ -296,8 +298,11 @@ async def health_check() -> dict[str, Any]:
         # Check if we can access job storage
         manager = JobManager.get_instance()
         stats = manager.get_stats()
-
-        # Basic system info (optional psutil)
+        
+        # Check database connectivity
+        jobs = manager.list_jobs(limit=1)
+        
+        # System info
         system_info = {}
         try:
             import psutil
@@ -308,12 +313,29 @@ async def health_check() -> dict[str, Any]:
             }
         except ImportError:
             system_info = {"note": "psutil not available - install for system metrics"}
-
+        
+        # Check if workers are running (by checking recent job processing)
+        worker_status = "unknown"
+        try:
+            recent_jobs = manager.list_jobs(limit=5)
+            recent_completed = [j for j in recent_jobs if j.get("status") in ["success", "failed"]]
+            if recent_completed:
+                worker_status = "active"
+            else:
+                worker_status = "idle"
+        except Exception:
+            worker_status = "error"
+        
         health_data = {
             "status": "healthy",
             "timestamp": datetime.now(UTC).isoformat(),
             "version": "1.0.0",
             "system": system_info,
+            "services": {
+                "database": "healthy" if jobs is not None else "unhealthy",
+                "workers": worker_status,
+                "sse": "healthy",  # SSE is always available
+            },
             "jobs": {
                 "total": stats.get("total_jobs", 0),
                 "pending": stats.get("pending_jobs", 0),
@@ -322,7 +344,7 @@ async def health_check() -> dict[str, Any]:
                 "failed": stats.get("failed_jobs", 0),
             }
         }
-
+        
         return health_data
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -546,6 +568,66 @@ async def clear_all_jobs() -> dict[str, str]:
 async def get_stats() -> dict[str, Any]:
     manager = JobManager.get_instance()
     return manager.get_stats()
+
+
+# Server-Sent Events for real-time job updates (more robust than WebSocket)
+@app.get("/events/jobs")
+async def sse_jobs():
+    async def event_generator():
+        manager = JobManager.get_instance()
+        
+        try:
+            # Send initial data
+            jobs = manager.list_jobs(limit=50)
+            stats = manager.get_stats()
+            data = {
+                "type": "initial",
+                "jobs": jobs,
+                "stats": stats
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+            
+            # Send periodic updates
+            update_count = 0
+            while True:
+                await asyncio.sleep(2)  # Update every 2 seconds
+                try:
+                    jobs = manager.list_jobs(limit=50)
+                    stats = manager.get_stats()
+                    data = {
+                        "type": "update", 
+                        "jobs": jobs,
+                        "stats": stats
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+                    update_count += 1
+                    
+                    # Reconnect every 100 updates to prevent memory leaks
+                    if update_count > 100:
+                        logger.info("SSE reconnecting after 100 updates")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"SSE update error: {e}")
+                    # Send error event
+                    error_data = {"type": "error", "message": "Update failed"}
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                    continue
+        except Exception as e:
+            logger.error(f"SSE generator error: {e}")
+            error_data = {"type": "error", "message": "Connection failed"}
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control",
+        }
+    )
 
 
 @app.get(

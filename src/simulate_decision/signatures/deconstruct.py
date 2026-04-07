@@ -4,30 +4,30 @@ import dspy
 
 
 class DeconstructSignature(dspy.Signature):
-    """ATOMIC DECONSTRUCTION. Decompose a concept into irreducible atoms."""
+    """STREAM INGESTOR (SI). Perform bit-wise deconstruction of input sequence into discrete packets."""
 
-    input_concept: str = dspy.InputField(desc="The subject to be atomized.")
-    instruction_strategy: str = dspy.InputField(desc="The current strategy for extraction.")
-    reasoning: str = dspy.OutputField(desc="${reasoning}")
-    atomic_atoms: str = dspy.OutputField(desc="A list of raw structural components.")
-    noise_detected: str = dspy.OutputField(desc="List of identified metaphors/analogies to be stripped.")
+    input_concept: str = dspy.InputField(desc="The input bitstream sequence to be processed.")
+    instruction_strategy: str = dspy.InputField(desc="The current state transition strategy.")
+    reasoning: str = dspy.OutputField(desc="${reasoning} - SDA transition logic")
+    atomic_atoms: str = dspy.OutputField(desc="Discrete bit packets b_i ∈ {0, 1} from deconstruction.")
+    noise_detected: str = dspy.OutputField(desc="Non-deterministic entropy sources to be filtered.")
 
 
 class VerifySignature(dspy.Signature):
-    """AXIOMATIC VALIDATION. Filter atoms to only those true in a vacuum."""
+    """STATE REGISTER (Σ). Validate and update internal configuration state."""
 
-    atomic_atoms: str = dspy.InputField(desc="The raw list of components.")
-    reasoning: str = dspy.OutputField(desc="${reasoning}")
-    verified_axioms: str = dspy.OutputField(desc="Only the mathematically undeniable atoms.")
-    rejection_reason: str = dspy.OutputField(desc="Reason why certain atoms were purged.")
+    atomic_atoms: str = dspy.InputField(desc="Incoming bit packets for state transition.")
+    reasoning: str = dspy.OutputField(desc="${reasoning} - Deterministic state update")
+    verified_axioms: str = dspy.OutputField(desc="Validated state σ_{t+1} after transition.")
+    rejection_reason: str = dspy.OutputField(desc="Invalid transitions violating determinism constraints.")
 
 
 class ReconstructSignature(dspy.Signature):
-    """TECHNICAL RECONSTRUCTION. Build blueprint from verified axioms."""
+    """LOGIC TRANSFORMATION UNIT (LTU). Execute deterministic transition function δ(σ_t, b_{t+1})."""
 
-    verified_axioms: str = dspy.InputField(desc="The validated atomic components.")
-    reasoning: str = dspy.OutputField(desc="${reasoning}")
-    technical_blueprint: str = dspy.OutputField(desc="The technical implementation blueprint.")
+    verified_axioms: str = dspy.InputField(desc="Current state σ_t and input bit b_{t+1}.")
+    reasoning: str = dspy.OutputField(desc="${reasoning} - Zero-entropy transition")
+    technical_blueprint: str = dspy.OutputField(desc="Result state σ_{t+1} and final output y after EOS.")
 
 
 class FailureAnalyzerSignature(dspy.Signature):

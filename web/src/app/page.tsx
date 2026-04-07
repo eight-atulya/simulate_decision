@@ -336,7 +336,7 @@ export default function Home() {
       fetchStats();
     } catch (error) {
       console.error("Failed to submit analysis:", error);
-      alert(`Failed to submit analysis: ${error.message}`);
+      alert(`Failed to submit analysis: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -394,14 +394,71 @@ export default function Home() {
 
   useEffect(() => {
     checkApi();
-    fetchJobs();
-    fetchStats();
+    
+    let usePolling = false;
+    let eventSource: EventSource | null = null;
+    
+    // Server-Sent Events for real-time updates (more robust than WebSocket)
+    const connectSSE = () => {
+      eventSource = new EventSource('http://localhost:8000/events/jobs');
+      
+      eventSource.onopen = () => {
+        console.log('SSE connected');
+        usePolling = false;
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'initial' || data.type === 'update') {
+            setJobs(data.jobs);
+            setStats(data.stats);
+          }
+        } catch (error) {
+          console.error('SSE message parse error:', error);
+        }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE connection failed, falling back to polling');
+        usePolling = true;
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      };
+    };
+    
+    connectSSE();
+    
+    // Polling fallback
+    const pollData = async () => {
+      if (!usePolling) return;
+      try {
+        await fetchJobs();
+        await fetchStats();
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+    
+    // Initial poll
+    pollData();
+    
+    // Regular polling/checking
     const interval = setInterval(() => {
       checkApi();
-      fetchJobs();
-      fetchStats();
+      if (usePolling || !eventSource || eventSource.readyState !== EventSource.OPEN) {
+        pollData();
+      }
     }, 5000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -518,6 +575,7 @@ export default function Home() {
                     <option value="full">Full (with critique)</option>
                     <option value="synthesis">Synthesis</option>
                     <option value="iterative">Iterative</option>
+                    <option value="atulya.core.one">Atulya Core One (SDA)</option>
                   </select>
                 </div>
               ) : (

@@ -1,0 +1,23 @@
+{
+  "status": "FAILURE",
+  "iterations": 3,
+  "purified_atoms": null,
+  "blueprint": null,
+  "strategy_history": [],
+  "metadata": {
+    "concept": "What are the fundamental principles of hash functions in merkel ?",
+    "total_iterations": 3,
+    "pipeline_name": "atulya.core.one",
+    "stages_executed": [
+      "stream_ingestor",
+      "state_register",
+      "logic_transformation"
+    ],
+    "lm_calls_count": 3,
+    "observability_enabled": true
+  },
+  "pipeline": "atulya.core.one",
+  "completed_at": "2026-04-07T10:15:43.279658+00:00",
+  "duration_seconds": 88.797373,
+  "error": "Not converged after 3 iterations"
+}
