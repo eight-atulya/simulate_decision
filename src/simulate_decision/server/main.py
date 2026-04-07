@@ -8,6 +8,8 @@ import signal
 import sys
 import json
 
+import uvicorn
+
 # Configure structured logging
 logging.basicConfig(
     level=logging.INFO,
@@ -88,8 +90,11 @@ async def run_all(
         # Start workers
         worker_task = asyncio.create_task(start_workers(num_workers=num_workers, max_retries=max_retries))
 
+        # Create task for shutdown event
+        shutdown_task = asyncio.create_task(shutdown_event.wait())
+
         # Wait for shutdown signal or worker completion
-        await asyncio.wait([shutdown_event.wait(), worker_task], return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait([shutdown_task, worker_task], return_when=asyncio.FIRST_COMPLETED)
 
         if shutdown_event.is_set():
             logger.info("Shutdown signal received, stopping workers...")
@@ -98,6 +103,14 @@ async def run_all(
             worker_task.cancel()
             try:
                 await worker_task
+            except asyncio.CancelledError:
+                pass
+
+        # Cancel any remaining tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
             except asyncio.CancelledError:
                 pass
 
