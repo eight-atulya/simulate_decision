@@ -34,6 +34,12 @@ WEB_DIR := $(ROOT)/web
 TMP_DIR := $(ROOT)/.make
 BACKEND_PID := $(TMP_DIR)/backend.pid
 FRONTEND_PID := $(TMP_DIR)/frontend.pid
+VENV_DIR := $(ROOT)/.venv
+ifeq ($(DETECTED_OS),windows)
+    VENV_PYTHON := $(VENV_DIR)/Scripts/python.exe
+else
+    VENV_PYTHON := $(VENV_DIR)/bin/python
+endif
 
 # -----------------------------
 # Service config
@@ -142,25 +148,25 @@ health status:
 # Tests / quality
 # -----------------------------
 .PHONY: test
-test:
-	@uv run pytest tests/ -v
+test: ensure-venv
+	@"$(VENV_PYTHON)" -m pytest tests/ -v
 
 .PHONY: test-core
-test-core:
-	@uv run pytest tests/test_core.py -v
+test-core: ensure-venv
+	@"$(VENV_PYTHON)" -m pytest tests/test_core.py -v
 
 .PHONY: lint
-lint:
-	@uv run ruff check .
+lint: ensure-venv
+	@"$(VENV_PYTHON)" -m ruff check .
 
 .PHONY: typecheck
-typecheck:
-	@uv run pyright
+typecheck: ensure-venv
+	@"$(VENV_PYTHON)" -m pyright
 
 .PHONY: format
-format:
-	@uv run ruff check . --fix
-	@uv run ruff format .
+format: ensure-venv
+	@"$(VENV_PYTHON)" -m ruff check . --fix
+	@"$(VENV_PYTHON)" -m ruff format .
 
 .PHONY: check
 check: lint typecheck test
@@ -183,10 +189,20 @@ endif
 # -----------------------------
 # Dependency install
 # -----------------------------
+.PHONY: ensure-venv
+ensure-venv:
+ifeq ($(DETECTED_OS),windows)
+	@if not exist "$(VENV_PYTHON)" (python -m venv "$(VENV_DIR)" && "$(VENV_PYTHON)" -m pip install --upgrade pip)
+else
+	@if [ ! -f "$(VENV_PYTHON)" ]; then python3 -m venv "$(VENV_DIR)" && "$(VENV_PYTHON)" -m pip install --upgrade pip; fi
+endif
+
 .PHONY: install
-install:
+install: ensure-venv
+	@"$(VENV_PYTHON)" -m pip install --upgrade pip
+	@"$(VENV_PYTHON)" -m pip install -e .[dev]
+	@"$(VENV_PYTHON)" -m pip install uv
 	@cd "$(WEB_DIR)" && npm install
-	@uv sync
 
 # -----------------------------
 # Cleanup (Python-based for portability)
@@ -203,7 +219,7 @@ print('Done!')"
 .PHONY: deep-clean
 deep-clean: clean
 	@echo Deep cleaning...
-	@$(PYTHON) -c "from pathlib import Path; import shutil; root=Path(r'$(ROOT)'); targets=[root/'web'/'node_modules', root/'.venv', root/'.simulatedecision', root/'data'/'results', root/'.make']; \
+	@$(PYTHON) -c "from pathlib import Path; import shutil; root=Path(r'$(ROOT)'); targets=[root/'web'/'node_modules', root/'.venv', root/'.simulatedecision', root/'data'/'results', root/'data'/'jobs.json', root/'.make']; \
 for p in targets: \
     shutil.rmtree(p, ignore_errors=True) if p.exists() else None; \
 print('Done!')"

@@ -400,48 +400,48 @@ async def get_job(job_id: str) -> JobDetailResponse:
     lm_calls_count = None
     converged = None
 
-    if job.get("status") == JobStatus.SUCCESS.value:
-        result_file = RESULTS_DIR / f"{job_id}.json"
-        if result_file.exists():
-            with open(result_file, encoding="utf-8") as f:
-                result_data = json.load(f)
-            
-            # Extract hyper-details from result
-            metadata = result_data.get("metadata", {})
-            execution_summary = {
-                "converged": metadata.get("converged", False),
-                "total_iterations": metadata.get("total_iterations"),
-                "pipeline_name": metadata.get("pipeline_name"),
-                "stages_executed": metadata.get("stages_executed", []),
-                "observability_enabled": metadata.get("observability_enabled", False),
+    result_file = RESULTS_DIR / f"{job_id}.json"
+    if result_file.exists():
+        with open(result_file, encoding="utf-8") as f:
+            result_data = json.load(f)
+    elif job.get("result"):
+        try:
+            result_data = json.loads(job["result"])
+        except json.JSONDecodeError:
+            result_data = None
+
+    if result_data is not None:
+        metadata = result_data.get("metadata", {})
+        execution_summary = {
+            "converged": metadata.get("converged", False),
+            "total_iterations": metadata.get("total_iterations"),
+            "pipeline_name": metadata.get("pipeline_name"),
+            "stages_executed": metadata.get("stages_executed", []),
+            "observability_enabled": metadata.get("observability_enabled", False),
+        }
+        pipeline_name = metadata.get("pipeline_name")
+        total_tokens_used = metadata.get("total_tokens_used")
+        lm_calls_count = metadata.get("lm_calls_count")
+        converged = metadata.get("converged", False)
+
+        token_efficiency = get_token_efficiency(job_id)
+        if "error" in token_efficiency:
+            token_efficiency = None
+
+        lm_data = get_lm_interactions(job_id)
+        if "error" not in lm_data:
+            lm_interactions_summary = {
+                "total_calls": lm_data.get("total_calls"),
+                "summary": lm_data.get("summary"),
             }
-            pipeline_name = metadata.get("pipeline_name")
-            total_tokens_used = metadata.get("total_tokens_used")
-            lm_calls_count = metadata.get("lm_calls_count")
-            converged = metadata.get("converged", False)
-            
-            # Get token efficiency
-            token_efficiency = get_token_efficiency(job_id)
-            if "error" in token_efficiency:
-                token_efficiency = None
-            
-            # Get LM interactions summary
-            lm_data = get_lm_interactions(job_id)
-            if "error" not in lm_data:
-                lm_interactions_summary = {
-                    "total_calls": lm_data.get("total_calls"),
-                    "summary": lm_data.get("summary"),
-                }
-            
-            # Get reasoning analysis
-            reasoning_analysis = get_reasoning_traces(job_id)
-            if "error" in reasoning_analysis:
-                reasoning_analysis = None
-            
-            # Get stage analysis
-            stage_analysis = get_stage_analysis(job_id)
-            if "error" in stage_analysis:
-                stage_analysis = None
+
+        reasoning_analysis = get_reasoning_traces(job_id)
+        if "error" in reasoning_analysis:
+            reasoning_analysis = None
+
+        stage_analysis = get_stage_analysis(job_id)
+        if "error" in stage_analysis:
+            stage_analysis = None
 
     return JobDetailResponse(
         id=job["id"],

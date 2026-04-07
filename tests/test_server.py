@@ -1,5 +1,6 @@
 """Tests for SimulateDecision Server."""
 
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -55,6 +56,98 @@ def test_get_job():
     response = client.get(f"/jobs/{job_id}")
     assert response.status_code == 200
     assert response.json()["concept"] == "Get test"
+
+
+def test_get_failed_job_details_exposes_result_when_available():
+    from simulate_decision.server.job_manager import JobManager, JobStatus
+    from simulate_decision.server.worker import RESULTS_DIR
+
+    manager = JobManager.get_instance()
+    job = manager.create_job("Failed job detail test case")
+    # First set to RUNNING, then to FAILED
+    manager.update_job_status(job["id"], JobStatus.RUNNING)
+    manager.update_job_status(
+        job["id"],
+        JobStatus.FAILED,
+        result=json.dumps({
+            "status": "FAILURE",
+            "iterations": 2,
+            "blueprint": None,
+            "purified_atoms": None,
+            "strategy_history": [],
+            "metadata": {
+                "concept": job["concept"],
+                "converged": False,
+                "total_iterations": 2,
+                "pipeline_name": "standard",
+                "stages_executed": ["deconstruct", "verify"],
+            },
+            "error": "Policy could not converge on stable axioms.",
+        }),
+        error="Policy could not converge on stable axioms.",
+    )
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    result_file = RESULTS_DIR / f"{job['id']}.json"
+    with open(result_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "status": "FAILURE",
+            "iterations": 2,
+            "blueprint": None,
+            "purified_atoms": None,
+            "strategy_history": [],
+            "metadata": {
+                "concept": job["concept"],
+                "converged": False,
+                "total_iterations": 2,
+                "pipeline_name": "standard",
+                "stages_executed": ["deconstruct", "verify"],
+            },
+            "error": "Policy could not converge on stable axioms.",
+        }, f)
+
+    response = client.get(f"/jobs/{job['id']}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert payload["error"] == "Policy could not converge on stable axioms."
+    assert payload["result"]["status"] == "FAILURE"
+    assert payload["result"]["metadata"]["converged"] is False
+
+
+def test_load_result_falls_back_to_job_record():
+    from simulate_decision.server.analysis import load_result
+    from simulate_decision.server.job_manager import JobManager, JobStatus
+
+    manager = JobManager.get_instance()
+    job = manager.create_job("Fallback result record test")
+    # First set to RUNNING, then to FAILED
+    manager.update_job_status(job["id"], JobStatus.RUNNING)
+    manager.update_job_status(
+        job["id"],
+        JobStatus.FAILED,
+        result=json.dumps({
+            "status": "FAILURE",
+            "iterations": 1,
+            "purified_atoms": None,
+            "blueprint": None,
+            "strategy_history": [],
+            "metadata": {
+                "concept": job["concept"],
+                "converged": False,
+                "total_iterations": 1,
+                "pipeline_name": "standard",
+                "stages_executed": ["deconstruct", "verify"],
+            },
+            "error": "No file present, fallback to job record.",
+        }),
+        error="No file present, fallback to job record.",
+    )
+
+    result = load_result(job["id"])
+    assert result is not None
+    assert result["status"] == "FAILURE"
+    assert result["metadata"]["converged"] is False
 
 
 def test_get_job_not_found():

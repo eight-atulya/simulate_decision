@@ -58,8 +58,18 @@ class JobManager:
             return {}
 
     def _save_jobs(self, jobs: dict[str, dict[str, Any]]) -> None:
-        with open(self.jobs_file, "w", encoding="utf-8") as f:
-            json.dump(jobs, f, indent=2, ensure_ascii=False)
+        import tempfile
+        import os
+        
+        # Atomic write: write to temp file then rename
+        temp_fd, temp_path = tempfile.mkstemp(dir=self.jobs_file.parent, suffix='.tmp')
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(jobs, f, indent=2, ensure_ascii=False)
+            os.replace(temp_path, self.jobs_file)
+        except Exception:
+            os.unlink(temp_path)
+            raise
 
     def create_job(
         self,
@@ -114,6 +124,22 @@ class JobManager:
         jobs = self._load_jobs()
         if job_id not in jobs:
             return
+
+        current_status = jobs[job_id].get("status")
+        
+        # Validate status transitions
+        valid_transitions = {
+            JobStatus.PENDING: [JobStatus.RUNNING, JobStatus.CANCELLED],
+            JobStatus.RUNNING: [JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.CANCELLED],
+            JobStatus.SUCCESS: [],  # Terminal state
+            JobStatus.FAILED: [JobStatus.RETRYING],  # Can retry failed jobs
+            JobStatus.RETRYING: [JobStatus.RUNNING, JobStatus.CANCELLED],
+            JobStatus.CANCELLED: [],  # Terminal state
+        }
+        
+        if current_status and status not in valid_transitions.get(JobStatus(current_status), []):
+            logger.warning(f"{_log_prefix()} Invalid status transition: {current_status} -> {status.value} for job {job_id}")
+            return  # Reject invalid transition
 
         now = _utcnow_iso()
         old_status = jobs[job_id].get("status")

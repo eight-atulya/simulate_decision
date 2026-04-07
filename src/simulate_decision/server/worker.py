@@ -63,6 +63,14 @@ class Worker:
     def _log_job_failed(self, job_id: str, error: str, is_permanent: bool = False, duration: float = 0.0) -> None:
         logger.info(f"[Worker-{self.worker_id:02d}] Job {job_id} failed - Duration: {duration:.2f}s - Error: {error[:100]}...")
 
+    def _persist_job_result(self, job_id: str, result_data: dict[str, Any]) -> None:
+        try:
+            result_file = RESULTS_DIR / f"{job_id}.json"
+            with open(result_file, "w", encoding="utf-8") as f:
+                json.dump(result_data, f, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            logger.warning(f"[Worker-{self.worker_id:02d}] Failed to persist result for {job_id}: {exc}")
+
     def _log_job_retry(self, job_id: str, retry_count: int, max_retries: int) -> None:
         logger.info(f"[Worker-{self.worker_id:02d}] Job {job_id} retry {retry_count}/{max_retries}")
 
@@ -74,6 +82,13 @@ class Worker:
         if job and job.get("status") == JobStatus.CANCELLED.value:
             return True
         return False
+
+    def _execute_pipeline(self, config: Any, pipeline_config: Any, concept: str) -> dict[str, Any]:
+        config.configure_dspy()
+        from simulate_decision.core import SimulateDecision
+
+        engine = SimulateDecision(config=config, pipeline_config=pipeline_config)
+        return engine(concept)
 
     async def process_job(self, job: dict[str, Any]) -> dict[str, Any]:
         job_id = job["id"]
@@ -98,7 +113,6 @@ class Worker:
             )
 
             config = get_config()
-            config.configure_dspy()
 
             template = PipelineTemplates.get(pipeline)
             if template:
@@ -110,11 +124,12 @@ class Worker:
                 else:
                     raise ValueError(f"Unknown template: {pipeline}")
 
-            from simulate_decision.core import SimulateDecision
-            engine = SimulateDecision(config=config, pipeline_config=pipeline_config)
-
             result = await asyncio.get_event_loop().run_in_executor(
-                None, engine, concept
+                None,
+                self._execute_pipeline,
+                config,
+                pipeline_config,
+                concept,
             )
 
             duration = (datetime.now(UTC) - start_time).total_seconds()
@@ -132,20 +147,29 @@ class Worker:
                 "error": result.get("error"),
             }
 
-            # Update job status based on result status
+            converged = result.get("metadata", {}).get("converged", False)
             job_status = JobStatus.SUCCESS if result.get("status") == "SUCCESS" else JobStatus.FAILED
+            failure_reason = None
+            if job_status == JobStatus.FAILED:
+                if not converged:
+                    failure_reason = f"Not converged after {result.get('iterations', iterations)} iterations"
+                else:
+                    failure_reason = result.get("error") or "Pipeline failed without a specific error"
+
+                result_data["error"] = failure_reason
 
             self.job_manager.update_job_status(
                 job_id,
                 job_status,
                 result=json.dumps(result_data),
-                error=result.get("error") if job_status == JobStatus.FAILED else None,
+                error=failure_reason if job_status == JobStatus.FAILED else None,
             )
+            self._persist_job_result(job_id, result_data)
 
             if job_status == JobStatus.SUCCESS:
                 self._log_job_success(job_id, iterations, duration)
             else:
-                self._log_job_failed(job_id, f"Did not converge after {iterations} iterations", duration=duration)
+                self._log_job_failed(job_id, failure_reason or "Pipeline failed", duration=duration)
 
             return {"job_id": job_id, "status": result_data["status"], "result": result_data}
 
@@ -202,6 +226,19 @@ class Worker:
 
             except Exception as e:
                 logger.error(f"[Worker-{self.worker_id:02d}] Error in worker loop: {e}")
+                # Reset current job if there was an error
+                if self.current_job_id:
+                    # Mark job as failed if it was running
+                    try:
+                        job = self.job_manager.get_job(self.current_job_id)
+                        if job and job.get("status") == JobStatus.RUNNING.value:
+                            self.job_manager.update_job_status(
+                                self.current_job_id,
+                                JobStatus.FAILED,
+                                error=f"Worker crashed: {str(e)}",
+                            )
+                    except Exception as inner_e:
+                        logger.error(f"[Worker-{self.worker_id:02d}] Failed to mark job as failed: {inner_e}")
                 self.current_job_id = None
                 await asyncio.sleep(5)
 

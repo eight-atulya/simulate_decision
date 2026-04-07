@@ -24,16 +24,23 @@ def get_result_file(job_id: str) -> Path:
 
 
 def load_result(job_id: str) -> dict[str, Any] | None:
-    """Load a job result from file."""
+    """Load a job result from file or fallback to the job record."""
     result_file = get_result_file(job_id)
-    if not result_file.exists():
-        return None
-    
-    try:
-        with open(result_file, encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
+    if result_file.exists():
+        try:
+            with open(result_file, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    manager = JobManager.get_instance()
+    job = manager.get_job(job_id)
+    if job and job.get("result"):
+        try:
+            return json.loads(job["result"])
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def get_token_efficiency(job_id: str) -> dict[str, Any]:
