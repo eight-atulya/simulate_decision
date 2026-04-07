@@ -307,8 +307,9 @@ export default function Home() {
     if (!concept.trim()) return;
     setLoading(true);
     try {
+      let response;
       if (analysisMode === "story") {
-        await fetch("http://localhost:8000/analyze", {
+        response = await fetch("http://localhost:8000/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
@@ -318,15 +319,24 @@ export default function Home() {
           }),
         });
       } else {
-        await fetch("http://localhost:8000/analyze", {
+        response = await fetch("http://localhost:8000/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ concept, iterations, pipeline }),
         });
       }
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       setConcept("");
       fetchJobs();
       fetchStats();
+    } catch (error) {
+      console.error("Failed to submit analysis:", error);
+      alert(`Failed to submit analysis: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -528,10 +538,12 @@ export default function Home() {
               <button
                 className="button-primary"
                 onClick={submitAnalysis}
-                disabled={loading || !concept.trim()}
+                disabled={loading || !concept.trim() || !apiOnline}
               >
                 {loading ? (
                   <span className="loading">⟳ Processing...</span>
+                ) : !apiOnline ? (
+                  <span>🔌 API Offline</span>
                 ) : (
                   <span>🚀 Start Analysis</span>
                 )}
