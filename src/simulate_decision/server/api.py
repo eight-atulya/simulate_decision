@@ -504,6 +504,23 @@ async def cancel_job(job_id: str) -> dict[str, str]:
     return {"message": "Job cancelled"}
 
 
+@app.post(
+    "/jobs/{job_id}/rerun",
+    response_model=JobResponse,
+    tags=["Jobs"],
+    summary="Rerun Failed Job",
+    description="Create a new job with the same parameters as a failed job.",
+)
+async def rerun_job(job_id: str) -> JobResponse:
+    manager = JobManager.get_instance()
+    new_job = manager.rerun_job(job_id)
+
+    if not new_job:
+        raise HTTPException(status_code=404, detail="Job not found or not in failed state")
+
+    return JobResponse(**new_job)
+
+
 @app.delete(
     "/jobs",
     tags=["Jobs"],

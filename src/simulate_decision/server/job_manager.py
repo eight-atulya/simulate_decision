@@ -250,6 +250,30 @@ class JobManager:
                 return True
         return False
 
+    def rerun_job(self, job_id: str) -> dict[str, Any] | None:
+        """Create a new job with the same parameters as a failed job"""
+        jobs = self._load_jobs()
+        if job_id not in jobs:
+            return None
+
+        original_job = jobs[job_id]
+        if original_job.get("status") != JobStatus.FAILED.value:
+            return None  # Only allow rerunning failed jobs
+
+        # Create new job with same parameters
+        new_job = self.create_job(
+            concept=original_job["concept"],
+            iterations=original_job["iterations"],
+            max_retries=original_job["max_retries"],
+            pipeline=original_job["pipeline"],
+        )
+
+        logger.info(f"{_log_prefix()}  JOB RERUN CREATED")
+        logger.info(f"{_log_prefix()}    ├─ Original Job: {job_id}")
+        logger.info(f"{_log_prefix()}    └─ New Job     : {new_job['id']}")
+
+        return new_job
+
     def get_stats(self) -> dict[str, Any]:
         jobs = self._load_jobs()
         stats: dict[str, Any] = {"total": len(jobs)}

@@ -344,6 +344,23 @@ export default function Home() {
     fetchStats();
   };
 
+  const rerunJob = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/jobs/${id}/rerun`, { method: "POST" });
+      if (res.ok) {
+        const newJob = await res.json();
+        fetchJobs();
+        fetchStats();
+        // Optionally show a success message or navigate to the new job
+        alert(`Job rerunning as: ${newJob.id.slice(0, 8)}`);
+      } else {
+        alert("Failed to rerun job");
+      }
+    } catch (error) {
+      alert("Error rerunning job");
+    }
+  };
+
   const viewJobResult = async (job: Job) => {
     setSelectedJob(job);
     setResultLoading(true);
@@ -591,6 +608,14 @@ export default function Home() {
                         onClick={() => cancelJob(job.id)}
                       >
                         ✕ Cancel
+                      </button>
+                    )}
+                    {job.status === "failed" && (
+                      <button
+                        className="button-rerun"
+                        onClick={() => rerunJob(job.id)}
+                      >
+                        🔄 Rerun
                       </button>
                     )}
                     <button
