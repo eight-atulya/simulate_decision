@@ -43,8 +43,37 @@ class EngineConfig:
     extra_body: dict = field(default_factory=lambda: {"response_format": {"type": "text"}})
     timeout: int = field(default_factory=lambda: int(os.getenv("TIMEOUT", "300")))
 
+    def validate(self) -> None:
+        """Validate configuration values"""
+        if not self.lm_studio_url.startswith(('http://', 'https://')):
+            raise ValueError("LM_STUDIO_URL must be a valid HTTP/HTTPS URL")
+
+        if not self.api_key or self.api_key == "lm-studio":
+            logger.warning("Using default API key - ensure this is set in production")
+
+        if self.max_iterations < 1 or self.max_iterations > 20:
+            raise ValueError("MAX_ITERATIONS must be between 1 and 20")
+
+        if self.signal_loss_threshold < 1:
+            raise ValueError("SIGNAL_LOSS_THRESHOLD must be at least 1")
+
+        if self.timeout < 10:
+            raise ValueError("TIMEOUT must be at least 10 seconds")
+
     def configure_dspy(self) -> None:
         import dspy
+        import logging
+
+        # Validate config before configuring DSPy
+        self.validate()
+
+        # Enable full DSPy logging
+        dspy.enable_logging()
+        dspy.enable_litellm_logging()
+        
+        # Configure Python logging for dspy
+        logging.getLogger("dspy").setLevel(logging.DEBUG)
+        logging.getLogger("litellm").setLevel(logging.WARNING)  # Less verbose for LiteLLM
 
         model_name = self.model_name
         if model_name.startswith("lmstudio/"):
@@ -58,7 +87,14 @@ class EngineConfig:
             timeout=self.timeout,
             **self._get_extra_kwargs(),
         )
-        dspy.settings.configure(lm=lm)
+        dspy.settings.configure(
+            lm=lm,
+            provide_traceback=True,  # Include Python tracebacks in error logs
+            track_usage=True,        # Record token counts for every LM call
+            max_trace_size=10000,    # Store all trace entries
+            max_history_size=10000,  # Store all LM interactions
+            disable_history=False,   # Enable history recording
+        )
 
     def _get_extra_kwargs(self) -> dict:
         kwargs = {}

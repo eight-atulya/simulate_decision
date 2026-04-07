@@ -3,14 +3,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
+import json
 
-import uvicorn
-
+# Configure structured logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+    format=json.dumps({
+        "timestamp": "%(asctime)s",
+        "level": "%(levelname)s",
+        "logger": "%(name)s",
+        "message": "%(message)s"
+    }) if os.getenv("LOG_FORMAT") == "json" else "%(asctime)s | %(name)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -45,9 +51,17 @@ async def run_all(
     max_retries: int = 3,
 ) -> None:
     from simulate_decision.server.api import app
+    from simulate_decision.server.worker import run_workers as start_workers
 
     # Start server in a thread so we can handle signals
-    server_config = uvicorn.Config(app, host=host, port=port, reload=False, access_log=False)
+    server_config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        access_log=False,
+        log_level="info"
+    )
     server = uvicorn.Server(server_config)
 
     def run_server_thread():
@@ -59,8 +73,39 @@ async def run_all(
 
     logger.info(f"Started server on {host}:{port}")
 
-    # Run workers in the main thread
-    await run_workers(num_workers=num_workers, max_retries=max_retries)
+    # Set up graceful shutdown
+    shutdown_event = asyncio.Event()
+
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, initiating graceful shutdown")
+        shutdown_event.set()
+
+    import signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        # Start workers
+        worker_task = asyncio.create_task(start_workers(num_workers=num_workers, max_retries=max_retries))
+
+        # Wait for shutdown signal or worker completion
+        await asyncio.wait([shutdown_event.wait(), worker_task], return_when=asyncio.FIRST_COMPLETED)
+
+        if shutdown_event.is_set():
+            logger.info("Shutdown signal received, stopping workers...")
+            # Give workers time to finish current jobs
+            await asyncio.sleep(5)
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+
+        logger.info("Shutdown complete")
+
+    except Exception as e:
+        logger.error(f"Error during server operation: {e}")
+        raise
 
 
 def signal_handler(sig, frame) -> None:

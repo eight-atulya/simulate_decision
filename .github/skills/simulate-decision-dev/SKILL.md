@@ -1,3 +1,8 @@
+---
+name: simulate-decision-dev
+description: '**DEVELOPMENT SKILL** — Commands for developing, testing, and managing the SimulateDecision application. USE FOR: starting development servers, running tests, code quality checks, building frontend, service management. DO NOT USE FOR: general coding questions; runtime debugging; production deployment. INVOKES: make commands, just commands, terminal operations for development workflow.'
+---
+
 # SimulateDecision Development Skill
 
 ## Overview
@@ -16,6 +21,7 @@ simulate_decision/
 ├── web/                    # Next.js frontend
 ├── data/                   # Runtime data
 ├── tests/                  # Test suite
+├── docs/                   # Documentation
 ├── Makefile                # Main build commands
 └── Justfile                # Alternative (just command)
 ```
@@ -210,5 +216,6 @@ make dev
 ## See Also
 
 - [API Documentation](http://localhost:8000/docs)
-- [README.md](./README.md)
-- [pyproject.toml](./pyproject.toml)
+- [README.md](../README.md)
+- [pyproject.toml](../pyproject.toml)
+- [data_capture_schema.md](data_capture_schema.md)

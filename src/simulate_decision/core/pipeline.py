@@ -207,7 +207,13 @@ class Pipeline:
 
         status = self._determine_status(converged, all_stage_results)
 
-        return PipelineResult(
+        # Collect LM history for full observability
+        lm = dspy.settings.lm
+        lm_history = []
+        if lm and hasattr(lm, 'history'):
+            lm_history = lm.history.copy() if isinstance(lm.history, list) else []
+
+        result = PipelineResult(
             status=status,
             concept=concept,
             iterations=self._context.iteration,
@@ -222,8 +228,13 @@ class Pipeline:
                     k: [{"status": r.status, "attempts": r.attempts} for r in v]
                     for k, v in all_stage_results.items()
                 },
+                "lm_history": lm_history,
+                "lm_calls_count": len(lm_history),
+                "observability_enabled": True,
             },
         )
+
+        return result
 
     def _execute_stage(self, stage: Stage, config: StageConfig) -> StageResult:
         if self._context is None:
@@ -402,6 +413,7 @@ class SimulateDecision(dspy.Module):
                 "blueprint": blueprint,
                 "purified_atoms": atoms,
                 "strategy_history": self.state.get_policy_history(),
+                "lm_history": pipeline_result.metadata.get("lm_history", []),
                 "metadata": {
                     "concept": pipeline_result.concept,
                     "total_iterations": pipeline_result.iterations,
@@ -411,6 +423,8 @@ class SimulateDecision(dspy.Module):
                     "pipeline_name": self.pipeline_config.name,
                     "stages_executed": list(pipeline_result.stage_results.keys()),
                     "final_output": pipeline_result.final_output,
+                    "lm_calls_count": pipeline_result.metadata.get("lm_calls_count", 0),
+                    "observability_enabled": pipeline_result.metadata.get("observability_enabled", False),
                 },
             }
         else:
@@ -419,11 +433,14 @@ class SimulateDecision(dspy.Module):
                 "error": pipeline_result.error or "Pipeline did not converge",
                 "iterations": pipeline_result.iterations,
                 "strategy_history": self.state.get_policy_history(),
+                "lm_history": pipeline_result.metadata.get("lm_history", []),
                 "metadata": {
                     "concept": pipeline_result.concept,
                     "total_iterations": pipeline_result.iterations,
                     "pipeline_name": self.pipeline_config.name,
                     "stages_executed": list(pipeline_result.stage_results.keys()),
+                    "lm_calls_count": pipeline_result.metadata.get("lm_calls_count", 0),
+                    "observability_enabled": pipeline_result.metadata.get("observability_enabled", False),
                 },
             }
 

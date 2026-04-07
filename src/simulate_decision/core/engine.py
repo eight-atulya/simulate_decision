@@ -42,6 +42,48 @@ class SimulateDecisionCore(dspy.Module):
         self.reconstruct = dspy.ChainOfThought(ReconstructSignature)
         self.analyzer = dspy.ChainOfThought(FailureAnalyzerSignature)
 
+import logging
+from pathlib import Path
+from typing import ClassVar
+
+import dspy
+
+from simulate_decision.core.config import EngineConfig, get_config
+from simulate_decision.core.state import StrategyState
+from simulate_decision.core.storage import Storage, create_entry
+from simulate_decision.signatures import (
+    DeconstructSignature,
+    FailureAnalyzerSignature,
+    ReconstructSignature,
+    VerifySignature,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class SimulateDecisionCore(dspy.Module):
+    _default_strategy: ClassVar[str] = (
+        "Identify the core structural elements and strip all human-centric metaphors."
+    )
+
+    def __init__(
+        self,
+        config: EngineConfig | None = None,
+        max_iterations: int = 3,
+        storage_path: Path | None = None,
+    ):
+        super().__init__()
+        self.config = config or get_config()
+        self.max_iterations = max_iterations
+        self.state = StrategyState()
+        self.storage = Storage(storage_path)
+
+        self.deconstruct = dspy.ChainOfThought(DeconstructSignature)
+        self.verify = dspy.ChainOfThought(VerifySignature)
+        self.reconstruct = dspy.ChainOfThought(ReconstructSignature)
+        self.analyzer = dspy.ChainOfThought(FailureAnalyzerSignature)
+
     def forward(self, concept: str, save_result: bool = True) -> dict[str, object]:
         self.state.concept = concept
         current_strategy = self._default_strategy
@@ -212,6 +254,29 @@ class SimulateDecisionCore(dspy.Module):
                     "all_reasonings": self.state.all_reasonings,
                 },
             }
+
+        # Collect DSPy traces
+        dspy_traces = dspy.settings.trace.copy()
+        dspy.settings.trace = []  # Reset for next run
+
+        # Add traces to result
+        if final_result:
+            final_result["dspy_traces"] = dspy_traces
+            final_result["metadata"]["dspy_trace_count"] = len(dspy_traces)
+
+        # Collect LM history and traces for full observability
+        lm = dspy.settings.lm
+        lm_history = []
+        if lm and hasattr(lm, 'history'):
+            lm_history = lm.history.copy() if isinstance(lm.history, list) else []
+        
+        # Add LM history and other observability data to result
+        if final_result:
+            final_result["lm_history"] = lm_history
+            final_result["dspy_trace_count"] = len(dspy.settings.trace) if hasattr(dspy.settings, 'trace') else 0
+            if "metadata" in final_result:
+                final_result["metadata"]["lm_calls_count"] = len(lm_history)
+                final_result["metadata"]["observability_enabled"] = True
 
         if save_result:
             entry = create_entry(concept, final_result, final_result["status"])
